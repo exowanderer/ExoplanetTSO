@@ -202,7 +202,7 @@ class ExoplanetUltranestTSO:
         params[2] = cube[2] * log_f_rng + log_f_min
 
         return params
-
+    """
     def log_likelihood(self, params):
         # unpack the current parameters:
 
@@ -224,7 +224,110 @@ class ExoplanetUltranestTSO:
 
         # compute likelihood
         return -0.5 * np.sum((fluxes - model) ** 2 / sigma2 + np.log(sigma2))
+    """
 
+    def log_likelihood(self, params):
+        fpfs, delta_ecenter, log_f = params  #
+        # print(fpfs, self.fpfs)
+        # self.fpfs = fpfs
+        # self.ecenter = self.ecenter0  # + delta_ecenter
+
+        self.bm_params.fp = fpfs
+        self.bm_params.t_secondary = self.ecenter0 + delta_ecenter
+
+        flux_errs = self.tso_data.flux_errs
+        fluxes = self.tso_data.fluxes
+        # pw_line = self.piecewise_linear_model(theta)
+        # pw_line = self.piecewise_offset_model(theta)
+
+        model = self.batman_krdata_wrapper()  # * pw_line
+        sigma2 = flux_errs**2 + model**2 * np.exp(2 * log_f)
+
+        residuals = fluxes - model
+
+        wavelet_log_likelihood = 0
+        if self.estimate_pinknoise and len(params) >= 5:
+            wavelet_log_likelihood = -0.5*self.get_wavelet_log_likelihood(
+                residuals=fluxes - model,
+                theta=params
+            )
+
+        normal_log_likelihood = residuals ** 2 / sigma2 + np.log(sigma2)
+        normal_log_likelihood = -0.5 * np.sum(normal_log_likelihood)
+
+        if wavelet_log_likelihood != 0 and self.verbose:
+            print('normal_log_likelihood', normal_log_likelihood)
+            print('wavelet_log_likelihood', wavelet_log_likelihood)
+
+        return normal_log_likelihood + wavelet_log_likelihood
+
+    def initialise_fit_params(
+            self, init_params=None, init_logf=-5.0, spread=1e-4, seed=None):
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.batman_fittable_param = [
+            'period', 'tcenter', 'ecenter', 'delta_center',
+            'inc', 'aprs',
+            'rprs', 'fpfs'
+            'ecc', 'omega',
+            'u1', 'u2',
+            'offset', 'slope', 'curvature',
+            'log_f', 'sigma_w', 'sigma_r', 'gamma',
+        ]
+
+        if init_params is not None and isinstance(init_params, dict):
+            self.init_params = init_params
+        else:  # approach with standard eclipse fitting parameters
+            init_fpfs = self.fpfs
+
+            # Standard eclipse fitting parameters
+            self.init_params = {
+                'fpfs': np.random.normal(init_fpfs, 0.1*spread),
+                'delta_center': np.random.normal(0.0, 10*spread),
+                'log_f': np.random.normal(init_logf, 100*spread)
+            }
+
+        if self.estimate_pinknoise:
+            # Activate Carter & Winn 2010 Wavelet LIkelihood Analyis
+            #   Implementation provided by Nestor Espinoza
+            #   https://github.com/nespinoza/pinknoise
+
+            self.init_params['sigma_w'] = np.random.normal(0.5, spread),
+            self.init_params['sigma_r'] = np.random.normal(0.5, spread)
+
+            self.fit_gamma = False
+            if self.fit_gamma:
+                self.init_params['gamma'] = np.random.normal(1.1, spread)
+
+        if 0 < self.n_piecewise_params <= 2:
+            # Add a offset and slope for each AOR
+            self.add_piecewise_linear(
+                n_lines=len(self.aornum_list),
+                add_slope=self.n_piecewise_params == 2  # 2 params
+            )
+
+        # Check that the user did not add parameters that the algorithm
+        #   does not know how to operate
+        for pname_ in self.init_params.keys():
+            if 'offset' in pname_:
+                # In case of piecewise step function
+                pname_ = 'offset'
+            if 'slope' in pname_:
+                # In case of piecewise linear function
+                pname_ = 'slope'
+            if 'curvature' in pname_:
+                # In case of piecewise parabolic function
+                pname_ = 'curvature'
+
+            assert (pname_ in self.batman_fittable_param), (
+                f'{pname_} from `init_params` not in '
+                '`self.batman_fittable_param`: \n' +
+                ', '.join(self.batman_fittable_param)
+            )
+
+    """
     def initialize_fit_params(self, init_logf=-5.0):
 
         # Compute MLE
@@ -245,6 +348,7 @@ class ExoplanetUltranestTSO:
                 n_lines=0,
                 add_slope=self.n_piecewise_params == 2  # 2 params
             )
+    """
 
     def inject_eclipse(self):
         ppm = 1e6
@@ -282,24 +386,27 @@ class ExoplanetUltranestTSO:
     def run_mle_pipeline(self, init_fpfs=None):
 
         if init_fpfs is not None:
-            self.init_params[0] = np.random.normal(init_fpfs, 1e-5)
+            self.init_params['fpfs'] = np.random.normal(init_fpfs, 1e-5)
 
         # nll = lambda *args: -self.log_ultranest_likelihood(*args)
-        nlp = lambda *args: -np.sum(self.log_mle_probability(*args))
-
-        print('init_params:', self.init_params)
-        if self.verbose:
-            print('init_params:', self.init_params)
-
-        self.soln = minimize(nlp, self.init_params)  # , args=())
+        nlp = lambda *args: -self.log_mle_probability(*args)
 
         if self.verbose:
-            print(
-                f'fpfs_ml={self.soln.x[0]*1e6}\n'
-                f'delta_ecenter_ml={self.soln.x[1]}\n'
-                f'ecenter_ml={self.ecenter0 + self.soln.x[1]}\n'
-                f'log_f_ml={self.soln.x[3]}\n'
-            )
+            print('Initial Params:')
+            for key, val in self.init_params.items():
+                print(f'{key}: {val}')
+
+        self.soln = minimize(nlp, self.init_params.values)  # , args=())
+
+        # Convert MLE soln.x list to mle_estimate dict
+        self.mle_estimate = dict(zip(self.init_params.keys(), self.soln.x))
+
+        if self.verbose:
+            ppm = 1e6
+            print('MLE Params:')
+            for key, val in self.mle_estimate.items():
+                val = val * ppm if key == 'fpfs' else val
+                print(f'{key}: {val}')
 
         # Plot MLE Results
         # x0 = np.linspace(0, 10, 500)
@@ -673,6 +780,22 @@ class ExoplanetUltranestTSO:
         self.ecenter = init_ecenter
         self.ecenter0 = init_ecenter
         self.fpfs = init_fpfs
+
+    def configure_pinknoise_model(self):
+        ndata = len(self.tso_data.times)
+        power_of_two = np.log(ndata) / np.log(2)
+        if power_of_two != int(power_of_two):
+            power_of_two = np.ceil(power_of_two)
+
+        self.ndata_wavelet = 2**power_of_two
+
+        lrg_pow2 = np.log(self.ndata_wavelet) / np.log(2)
+
+        assert (lrg_pow2 == int(lrg_pow2)), \
+            'Wavelet requires power of two data points'
+
+        self.ndata_wavelet = int(self.ndata_wavelet)
+        self.wavelet_model = pinknoise.compute(self.ndata_wavelet)
 
     def save_mle_ultranest(self):
         discard = 0

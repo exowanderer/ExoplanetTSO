@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from exotso.exotso_ultranest import ExoplanetUltranestTSO
-from spitzer_ultranest_utils import (
+from exotso.utils import (
     grab_data_from_csv,
     visualise_ultranest_traces_corner,
     visualise_ultranest_samples,
@@ -19,8 +19,6 @@ if __name__ == '__main__':
     mast_name = 'HAT-P-26b'
     inj_fpfs = 0 / ppm  # no injected signal
     init_fpfs = 265 / ppm  # no injected signal
-    n_samples = 10000
-    nwalkers = 32
     min_num_live_points = 1000
     aper_key = 'rad_2p5_0p0'
     centering_key = 'gaussian_fit'
@@ -55,8 +53,6 @@ if __name__ == '__main__':
             aper_key=aper_key,
             inj_fpfs=0,
             init_fpfs=init_fpfs,
-            nwalkers=nwalkers,
-            n_samples=n_samples,
             n_sig=n_sig,
             process_mcmc=False,
             run_full_pipeline=False,

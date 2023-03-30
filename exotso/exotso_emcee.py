@@ -686,7 +686,8 @@ class ExoplanetEmceeTSO:
         model = self.batman_krdata_wrapper()  # * pw_line
         sigma2 = flux_errs**2 + model**2 * np.exp(2 * log_f)
 
-        residuals = (fluxes - model)
+        residuals = fluxes - model
+
         wavelet_log_likelihood = 0
         if self.estimate_pinknoise and len(theta) >= 5:
             wavelet_log_likelihood = -0.5*self.get_wavelet_log_likelihood(
