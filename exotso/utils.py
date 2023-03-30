@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 import os
 
-from ultranest.plot import cornerplot, PredictionBand
+try:
+    from ultranest.plot import cornerplot, PredictionBand, traceplot
+    HAS_ULTRANEST = True
+except ImportError:
+    HAS_ULTRANEST = False
 
 from dataclasses import dataclass
 from exomast_api import exoMAST_API
@@ -13,16 +17,22 @@ from matplotlib import pyplot as plt
 from scipy.special import gammaln, ndtri
 from tqdm import tqdm
 
-from wanderer import load_wanderer_instance_from_file
+try:
+    from wanderer import load_wanderer_instance_from_file
+    HAS_WANDERER = True
+except ImportError:
+    print("Please install `wanderer` before importing")
+    HAS_WANDERER = False
 
+from .models import ExoplanetTSOData
 
+"""
 @dataclass
 class KRDataInputs:
     ind_kdtree: np.ndarray = None
     gw_kdtree: np.ndarray = None
     fluxes: np.ndarray = None
-
-
+"""
 """
 @dataclass
 class MCMCArgs:
@@ -51,7 +61,7 @@ class MCMCArgs:
 
 """
 
-
+"""
 @dataclass
 class ExoplanetTSOData:
     times: np.ndarray = None
@@ -64,6 +74,7 @@ class ExoplanetTSOData:
     ycenters: np.ndarray = None
     xwidths: np.ndarray = None
     ywidths: np.ndarray = None
+"""
 
 
 def grab_data_from_csv(filename=None, aornums=None):
@@ -294,6 +305,12 @@ def load_from_df(df, aper_key=None, centering_key=None):
 def load_from_wanderer(
         planet_name, channel, aor_dir, aper_key=None, centering_key=None):
 
+    if not HAS_WANDERER:
+        raise ImportError(
+            'please install wanderer via '
+            'https://github.com/exowanderer/wanderer'
+        )
+
     wanderer_, data_config = load_wanderer_instance_from_file(
         planet_name=planet_name,
         channel=channel,
@@ -332,10 +349,15 @@ def plot_ultranest_trace(sampler, suptitle=None):
         from ultranest.plot import traceplot
         traceplot(results=results, labels=paramnames + derivedparamnames)
     """
-    from ultranest.plot import traceplot
-    import matplotlib.pyplot as plt
+    if not HAS_ULTRANEST:
+        raise ImportError(
+            'please install `ultranest` via '
+            'https://github.com/JohannesBuchner/UltraNest'
+        )
+
     if sampler.log:
         sampler.logger.debug('Making trace plot ... ')
+
     paramnames = sampler.paramnames + sampler.derivedparamnames
     # get dynesty-compatible sequences
     fig, axes = traceplot(
@@ -358,6 +380,11 @@ def plot_ultranest_trace(sampler, suptitle=None):
 
 
 def visualise_ultranest_traces_corner(spitzer_analysis, suptitle=None):
+    if not HAS_ULTRANEST:
+        raise ImportError(
+            'please install `ultranest` via '
+            'https://github.com/JohannesBuchner/UltraNest'
+        )
 
     # Compute Estimators
     spitzer_analysis.sampler.print_results()
@@ -372,6 +399,11 @@ def visualise_ultranest_traces_corner(spitzer_analysis, suptitle=None):
 
 
 def visualise_ultranest_samples(spitzer_analysis):
+    if not HAS_ULTRANEST:
+        raise ImportError(
+            'please install `ultranest` via '
+            'https://github.com/JohannesBuchner/UltraNest'
+        )
 
     # Save White Space Below
     times = spitzer_analysis.tso_data.times

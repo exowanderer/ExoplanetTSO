@@ -9,7 +9,6 @@ try:
     import pinknoise
     HAS_PINKNOISE = True
 except ImportError:
-    print("Please install `pinknoise` before importing")
     HAS_PINKNOISE = False
 
 from datetime import datetime, timezone
@@ -782,6 +781,12 @@ class ExoplanetUltranestTSO:
         self.fpfs = init_fpfs
 
     def configure_pinknoise_model(self):
+        if not HAS_PINKNOISE:
+            raise ImportError(
+                'please install pinknoise via '
+                'https://github.com/nespinoza/pinknoise'
+            )
+
         ndata = len(self.tso_data.times)
         power_of_two = np.log(ndata) / np.log(2)
         if power_of_two != int(power_of_two):
