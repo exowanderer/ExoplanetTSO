@@ -1,6 +1,7 @@
 import batman
 import joblib
 import numpy as np
+import os
 
 import ultranest
 import ultranest.stepsampler as stepsampler
@@ -50,7 +51,8 @@ class ExoplanetUltranestTSO:
             trim_size=0, timebinsize=0, mast_name=None, n_fits=1000,
             inj_fpfs=0, estimate_pinknoise=False, centering_key=None,
             aper_key=None, init_fpfs=None, n_piecewise_params=0, n_sig=5,
-            process_mcmc=False, run_full_pipeline=False, savenow=False,
+            process_mcmc=False, run_full_pipeline=False,
+            log_dir='ultranest_savedir', savenow=False,
             visualise_mle=False, visualise_nests=False,
             visualise_mcmc_results=False, standardise_fluxes=False,
             standardise_times=False, standardise_centers=False, verbose=False):
@@ -68,6 +70,7 @@ class ExoplanetUltranestTSO:
         self.inj_fpfs = inj_fpfs
         self.init_fpfs = init_fpfs
         self.process_mcmc = process_mcmc
+        self.log_dir = log_dir
         self.savenow = savenow
         self.visualise_mle = visualise_mle
         self.visualise_mcmc_results = visualise_mcmc_results
@@ -100,8 +103,8 @@ class ExoplanetUltranestTSO:
             print(f'KRData Creation took {end_krdata - start_krdata} seconds')
 
         self.configure_planet_info()
-        self.initialize_fit_params()
-        self.initialize_bm_params()
+        self.initialise_fit_params()
+        self.initialise_bm_params()
 
         if self.estimate_pinknoise:
             self.configure_pinknoise_model()
@@ -109,7 +112,7 @@ class ExoplanetUltranestTSO:
         if self.inj_fpfs > 0:
             self.inject_eclipse()
 
-    def initialize_bm_params(self):
+    def initialise_bm_params(self):
         # object to store transit parameters
         self.bm_params = batman.TransitParams()
         self.bm_params.per = self.period  # orbital period
@@ -150,7 +153,10 @@ class ExoplanetUltranestTSO:
         self.run_mle_pipeline()
 
         if self.process_mcmc:
-            self.run_ultranest_pipeline()
+            self.run_ultranest_pipeline(
+                num_live_points=400,
+                log_dir_extra=None
+            )
 
         if self.savenow:
             self.save_mle_ultranest()
@@ -201,6 +207,7 @@ class ExoplanetUltranestTSO:
         params[2] = cube[2] * log_f_rng + log_f_min
 
         return params
+
     """
     def log_likelihood(self, params):
         # unpack the current parameters:
@@ -215,8 +222,8 @@ class ExoplanetUltranestTSO:
 
         flux_errs = self.tso_data.flux_errs
         fluxes = self.tso_data.fluxes
-        # pw_line = self.piecewise_linear_model(theta)
-        # pw_line = self.piecewise_offset_model(theta)
+        # pw_line = self.piecewise_linear_model(params)
+        # pw_line = self.piecewise_offset_model(params)
 
         model = self.batman_krdata_wrapper()  # * pw_line
         sigma2 = flux_errs**2 + model**2 * np.exp(2 * log_f)
@@ -224,9 +231,33 @@ class ExoplanetUltranestTSO:
         # compute likelihood
         return -0.5 * np.sum((fluxes - model) ** 2 / sigma2 + np.log(sigma2))
     """
+    """
+    def get_wavelet_log_likelihood(self, residuals, params):
+        if len(params[3:]) == 2:
+            sigma_w, sigma_r = params[3:]
+            gamma = 1.0
+        if len(params[3:]) == 3:
+            sigma_w, sigma_r, gamma = params[3:]
+
+        if residuals.size != self.ndata_wavelet:
+            # Pad up to self.ndata_wavelet
+            padding = np.zeros(self.ndata_wavelet - residuals.size)
+            residuals = np.r_[residuals, padding]
+
+        # print(residuals.sum(), sigma_w, sigma_r, gamma)
+        return self.wavelet_model.get_likelihood(
+            residuals,
+            sigma_w,
+            sigma_r,
+            gamma=gamma
+        )
+    """
 
     def log_likelihood(self, params):
-        fpfs, delta_ecenter, log_f = params  #
+        fpfs, delta_ecenter, log_f = params[:3]  #
+        # sigma_w, sigma_r = params[3:5] if self.estimate_pinknoise else (1, 1)
+        # gamma = params[5] if len(params) == 6 else 1.0
+        # print(params)
         # print(fpfs, self.fpfs)
         # self.fpfs = fpfs
         # self.ecenter = self.ecenter0  # + delta_ecenter
@@ -236,8 +267,8 @@ class ExoplanetUltranestTSO:
 
         flux_errs = self.tso_data.flux_errs
         fluxes = self.tso_data.fluxes
-        # pw_line = self.piecewise_linear_model(theta)
-        # pw_line = self.piecewise_offset_model(theta)
+        # pw_line = self.piecewise_linear_model(params)
+        # pw_line = self.piecewise_offset_model(params)
 
         model = self.batman_krdata_wrapper()  # * pw_line
         sigma2 = flux_errs**2 + model**2 * np.exp(2 * log_f)
@@ -248,7 +279,7 @@ class ExoplanetUltranestTSO:
         if self.estimate_pinknoise and len(params) >= 5:
             wavelet_log_likelihood = -0.5*self.get_wavelet_log_likelihood(
                 residuals=fluxes - model,
-                theta=params
+                params=params
             )
 
         normal_log_likelihood = residuals ** 2 / sigma2 + np.log(sigma2)
@@ -269,7 +300,7 @@ class ExoplanetUltranestTSO:
         self.batman_fittable_param = [
             'period', 'tcenter', 'ecenter', 'delta_center',
             'inc', 'aprs',
-            'rprs', 'fpfs'
+            'rprs', 'fpfs',
             'ecc', 'omega',
             'u1', 'u2',
             'offset', 'slope', 'curvature',
@@ -293,7 +324,7 @@ class ExoplanetUltranestTSO:
             #   Implementation provided by Nestor Espinoza
             #   https://github.com/nespinoza/pinknoise
 
-            self.init_params['sigma_w'] = np.random.normal(0.5, spread),
+            self.init_params['sigma_w'] = np.random.normal(0.5, spread)
             self.init_params['sigma_r'] = np.random.normal(0.5, spread)
 
             self.fit_gamma = False
@@ -327,7 +358,8 @@ class ExoplanetUltranestTSO:
             )
 
     """
-    def initialize_fit_params(self, init_logf=-5.0):
+
+    def initialise_fit_params(self, init_logf=-5.0):
 
         # Compute MLE
         np.random.seed(42)
@@ -395,7 +427,7 @@ class ExoplanetUltranestTSO:
             for key, val in self.init_params.items():
                 print(f'{key}: {val}')
 
-        self.soln = minimize(nlp, self.init_params.values)  # , args=())
+        self.soln = minimize(nlp, list(self.init_params.values()))
 
         # Convert MLE soln.x list to mle_estimate dict
         self.mle_estimate = dict(zip(self.init_params.keys(), self.soln.x))
@@ -410,7 +442,7 @@ class ExoplanetUltranestTSO:
         # Plot MLE Results
         # x0 = np.linspace(0, 10, 500)
 
-    def run_ultranest_pipeline(self, min_num_live_points=400, alpha=1e-4):
+    def run_ultranest_pipeline(self, num_live_points=400, log_dir_extra=None):
         # ultranest Sampling
         # init_distro = alpha * np.random.randn(self.nwalkers, len(self.soln.x))
 
@@ -421,25 +453,55 @@ class ExoplanetUltranestTSO:
         # nwalkers, ndim = pos.shape
 
         # Avoid complications with MKI
-        # os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["OMP_NUM_THREADS"] = "16"
         parameters = ['fpfs', 'delta_ecenter', 'log_f']  #
+        ndim = len(parameters)
+        log_dir = f'{self.log_dir}_RNS-{ndim}'
+
+        if log_dir_extra is not None:
+            log_dir = f'{log_dir}_{log_dir_extra}'
 
         # with Pool(cpu_count()-1) as pool:
         self.sampler = ultranest.ReactiveNestedSampler(
             parameters,
             self.log_likelihood,
             self.log_ultranest_prior,
+            log_dir=log_dir
             # wrapped_params=[False, False, False, True],
         )
+        """
+        self.sampler =  = ReactiveNestedSampler(
+            parameters,
+            self.log_likelihood,
+            transform=self.log_ultranest_prior,
+            log_dir=self.log_dir + 'RNS-%dd' % ndim,
+            resume=True,
+            vectorized=False
+        )
 
+        if args.slice:
+            # set up step sampler. Here, we use a differential evolution slice sampler:
+            import ultranest.stepsampler
+            sampler.stepsampler = ultranest.stepsampler.SliceSampler(
+                nsteps=args.slice_steps,
+                generate_direction=ultranest.stepsampler.generate_mixture_random_direction,
+            )
+
+        # run sampler, with a few custom arguments:
+        sampler.run(
+            dlogz=0.5 + 0.1 * ndim,
+            update_interval_iter_fraction=0.4 if ndim > 20 else 0.2,
+            max_num_improvement_loops=3,
+            min_num_live_points=args.num_live_points)
+        """
         start = time()
         self.ultranest_results = self.sampler.run(
-            min_num_live_points=min_num_live_points,
+            min_num_live_points=num_live_points,
             # dKL=np.inf,
             # min_ess=100
         )
 
-        print(f"Multiprocessing took { time() - start:.1f} seconds")
+        print(f"ULtranest took { time() - start:.1f} seconds")
 
     def preprocess_pipeline(self):
 
@@ -629,13 +691,13 @@ class ExoplanetUltranestTSO:
         )
     """
     """
-    def piecewise_linear_model(self, theta):
+    def piecewise_linear_model(self, params):
         times = self.tso_data.times.copy()
         aornums = self.tso_data.aornums.copy()
         sorted_aornums = np.sort(np.unique(aornums))
 
-        offsets = theta[3::2]
-        slopes = theta[4::2]
+        offsets = params[3::2]
+        slopes = params[4::2]
 
         # print(offsets, slopes)
         piecewise_line = np.zeros_like(times)
@@ -647,12 +709,12 @@ class ExoplanetUltranestTSO:
 
         return piecewise_line
 
-    def piecewise_offset_model(self, theta):
+    def piecewise_offset_model(self, params):
         times = self.tso_data.times.copy()
         aornums = self.tso_data.aornums.copy()
         sorted_aornums = np.sort(np.unique(aornums))
 
-        offsets = theta[3:]
+        offsets = params[3:]
 
         # print(offsets, slopes)
         piecewise_offset = np.zeros_like(times)
@@ -666,9 +728,9 @@ class ExoplanetUltranestTSO:
     """
 
     @staticmethod
-    def log_mle_prior(theta):
+    def log_mle_prior(params):
         # return 0  # Open prior
-        fpfs, delta_ecenter, log_f = theta[:3]  #
+        fpfs, delta_ecenter, log_f = params[:3]  #
         # print('log_prior', fpfs, delta_ecenter, log_f)  #
         ppm = 1e6
         # TODO: Experiment with negative eclipse depths
@@ -691,8 +753,8 @@ class ExoplanetUltranestTSO:
         )
 
     """
-    def log_ultranest_likelihood(self, theta):
-        fpfs, delta_ecenter, log_f = theta[:3]  #
+    def log_ultranest_likelihood(self, params):
+        fpfs, delta_ecenter, log_f = params[:3]  #
         # print(fpfs, self.fpfs)
         # self.fpfs = fpfs
         # self.ecenter = self.ecenter0  # + delta_ecenter
@@ -702,8 +764,8 @@ class ExoplanetUltranestTSO:
 
         flux_errs = self.tso_data.flux_errs
         fluxes = self.tso_data.fluxes
-        # pw_line = self.piecewise_linear_model(theta)
-        # pw_line = self.piecewise_offset_model(theta)
+        # pw_line = self.piecewise_linear_model(params)
+        # pw_line = self.piecewise_offset_model(params)
 
         model = self.batman_krdata_wrapper()  # * pw_line
         sigma2 = flux_errs**2 + model**2 * np.exp(2 * log_f)
@@ -711,14 +773,14 @@ class ExoplanetUltranestTSO:
         return -0.5 * np.sum((fluxes - model) ** 2 / sigma2 + np.log(sigma2))
     """
 
-    def log_ultranest_probability(self, theta):
-        return self.log_likelihood(theta)
+    # def log_ultranest_probability(self, params):
+    #     return self.log_likelihood(params)
 
-    def log_mle_probability(self, theta):
-        lp = self.log_mle_prior(theta)
+    def log_mle_probability(self, params):
+        lp = self.log_mle_prior(params)
 
         return (
-            self.log_likelihood(theta)  # + lp
+            self.log_likelihood(params)  # + lp
             if np.isfinite(lp) else -np.inf
         )
 
@@ -802,33 +864,30 @@ class ExoplanetUltranestTSO:
         self.ndata_wavelet = int(self.ndata_wavelet)
         self.wavelet_model = pinknoise.compute(self.ndata_wavelet)
 
-    def save_mle_ultranest(self):
-        discard = 0
-        thin = 1
-        self.tau = []
-
-        try:
-            self.tau = self.sampler.get_autocorr_time()
-        except Exception as err:
-            print(err)
-
-        ultranest_output = {
-            'flat_samples': self.sampler.get_chain(
-                discard=discard, thin=thin, flat=True
-            ),
-            'samples': self.sampler.get_chain(),
-            'tau': self.tau
-        }
-
+    def save_mle_ultranest(self, savedir=None, num_live_points=''):
         isotime = datetime.now(timezone.utc).isoformat()
+
+        if savedir is None:
+            savedir = 'ultranest_savedir'
+
+        if not os.path.exists(savedir):
+            os.mkdir(savedir)
+
+        savename = (
+            f'{self.planet_name}_ultranest_krdata_{isotime}_'
+            f'{num_live_points}_{self.aper_key}.joblib.save'
+        )
+
+        save_path = os.path.join(savedir, savename)
 
         joblib.dump(
             {
-                'ultranest': ultranest_output,
-                'mle': self.soln
+                'ultranest': self.ultranest_results,
+                'mle': self.soln if hasattr(self, 'soln') else None
             },
-            f'ultranest_spitzer_krdata_ppm_results_{isotime}.joblib.save'
+            save_path
         )
+        print(f'Saving Ultranest run to {save_path}')
 
     def load_mle_ultranest(self, filename=None, isotime=None):
 

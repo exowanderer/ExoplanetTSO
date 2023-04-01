@@ -184,7 +184,7 @@ class ExoplanetEmceeTSO:
         self.batman_fittable_param = [
             'period', 'tcenter', 'ecenter', 'delta_center',
             'inc', 'aprs',
-            'rprs', 'fpfs'
+            'rprs', 'fpfs',
             'ecc', 'omega',
             'u1', 'u2',
             'offset', 'slope', 'curvature',
@@ -208,7 +208,7 @@ class ExoplanetEmceeTSO:
             #   Implementation provided by Nestor Espinoza
             #   https://github.com/nespinoza/pinknoise
 
-            self.init_params['sigma_w'] = np.random.normal(0.5, spread),
+            self.init_params['sigma_w'] = np.random.normal(0.5, spread)
             self.init_params['sigma_r'] = np.random.normal(0.5, spread)
 
             self.fit_gamma = False
@@ -291,7 +291,9 @@ class ExoplanetEmceeTSO:
             for key, val in self.init_params.items():
                 print(f'{key}: {val}')
 
-        self.soln = minimize(nlp, self.init_params.values)  # , args=())
+        print(list(self.init_params.values()))
+        self.soln = minimize(
+            nlp, list(self.init_params.values()))  # , args=())
 
         # Convert MLE soln.x list to mle_estimate dict
         self.mle_estimate = dict(zip(self.init_params.keys(), self.soln.x))
@@ -317,8 +319,9 @@ class ExoplanetEmceeTSO:
         nwalkers, ndim = pos.shape
 
         # Avoid complications with MKI
-        os.environ["OMP_NUM_THREADS"] = "1"
+        # os.environ["OMP_NUM_THREADS"] = "1"
 
+        # TODO: Understand why `pool=pool` stopped working after working well
         # with Pool(cpu_count()-1) as pool:
         self.sampler = emcee.EnsembleSampler(
             nwalkers, ndim, self.log_emcee_probability,  # pool=pool
@@ -326,7 +329,7 @@ class ExoplanetEmceeTSO:
 
         start = time()
         self.sampler.run_mcmc(pos, self.n_samples, progress=True)
-        print(f"Multiprocessing took { time() - start:.1f} seconds")
+        print(f"Emcee took { time() - start:.1f} seconds")
 
     def postprocess_pipeline(self, discard=100, thin=15, burnin=0.2):
         if self.verbose:
@@ -581,7 +584,7 @@ class ExoplanetEmceeTSO:
     def log_emcee_prior(self, theta):
         # return 0  # Open prior
         fpfs, delta_ecenter, log_f = theta[:3]  #
-        sigma_w, sigma_r = theta[3:5] if self.estimate_pinknoise else 1, 1
+        sigma_w, sigma_r = theta[3:5] if self.estimate_pinknoise else (1, 1)
         gamma = theta[5] if len(theta) == 6 else 1.0
 
         # print('log_prior', fpfs, delta_ecenter, log_f)  #
@@ -600,6 +603,12 @@ class ExoplanetEmceeTSO:
         sr_min = 0
         gm_min = 1.0
 
+        # print('1', ed_min <= fpfs < ed_max)
+        # print('2', dc_min < delta_ecenter < dc_max)
+        # print('3', lf_min < log_f < lf_max)
+        # print('4', sw_min, sigma_w)
+        # print('5', sr_min <= sigma_r)
+        # print('6', gm_min <= gamma)
         return (
             0.0 if (
                 ed_min <= fpfs < ed_max and

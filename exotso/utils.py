@@ -816,10 +816,7 @@ def trace_plot(sampler):
     n_chain_samples, nwalkers, ndim = samples.shape
     if n_chain_samples < 1000:
         burnin = 0
-        discard = 0
-        thin = 1
 
-    n_chain_burning = int(burnin * n_chain_samples)
     samples = samples.copy()
     labels = get_labels(ndim)
 
@@ -838,14 +835,26 @@ def trace_plot(sampler):
 
 
 def flatten_chains(sampler, discard=100, thin=15, burnin=0.2):
+    n_chain_samples, _, _ = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
+
     flat_samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
-    n_flat_samples, ndim = flat_samples.shape
+    n_flat_samples, _ = flat_samples.shape
 
     n_flat_burnin = int(burnin * n_flat_samples)
     return flat_samples.copy()[n_flat_burnin:]
 
 
 def print_emcee_results(sampler, discard=100, thin=15, burnin=0.2):
+    n_chain_samples, _, ndim = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
+
     flat_samples = flatten_chains(
         sampler,
         discard=discard,
@@ -853,7 +862,6 @@ def print_emcee_results(sampler, discard=100, thin=15, burnin=0.2):
         burnin=burnin
     )
 
-    _, ndim = flat_samples.shape
     labels = get_labels(ndim)
 
     for i in range(len(labels)):
@@ -868,14 +876,18 @@ def print_emcee_results(sampler, discard=100, thin=15, burnin=0.2):
 
 
 def get_truth_emcee_values(sampler, discard=100, thin=15, burnin=0.2):
+    n_chain_samples, _, ndim = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
+
     flat_samples = flatten_chains(
         sampler,
         discard=discard,
         thin=thin,
         burnin=burnin
     )
-
-    _, ndim = flat_samples.shape
 
     # TODO: Add upper and lower quantils into Corner plot labels
     perctiles = [16, 50, 84]
@@ -905,20 +917,13 @@ def visualise_emcee_traces_corner(
         spitzer_analysis, discard=100, thin=15, burnin=0.2, verbose=False):
 
     # Save White Space Below
-    # times = spitzer_analysis.tso_data.times
-    # fluxes = spitzer_analysis.tso_data.fluxes
-    # yerr = spitzer_analysis.tso_data.flux_errs
     sampler = spitzer_analysis.sampler
-    # Convert from decimal to ppm
 
-    flat_samples = flatten_chains(
-        sampler,
-        discard=discard,
-        thin=thin,
-        burnin=burnin
-    )
-
-    n_flat_samples, ndim = flat_samples.shape
+    n_chain_samples, _, ndim = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
 
     try:
         tau = sampler.get_autocorr_time()
@@ -926,7 +931,12 @@ def visualise_emcee_traces_corner(
     except Exception as err:
         print(err)
 
-    print_emcee_results(sampler, discard=100, thin=15, burnin=0.2)
+    print_emcee_results(
+        sampler,
+        discard=discard,
+        thin=thin,
+        burnin=burnin
+    )
 
     trace_plot(sampler)
     # Display Corner Plots
@@ -945,11 +955,20 @@ def visualise_emcee_traces_corner(
             print(f'{key}: {val}')
 
     labels = get_labels(ndim)
+
+    flat_samples = flatten_chains(
+        sampler,
+        discard=discard,
+        thin=thin,
+        burnin=burnin
+    )
+
+    truths = list(so_called_truth.values())
     flat_samples[:, 0] = flat_samples[:, 0] * ppm
     fig = corner.corner(
         flat_samples[:, :len(labels)],
         labels=labels,
-        truths=so_called_truth.values,
+        truths=truths,
         show_titles=True
     )
 
@@ -965,23 +984,21 @@ def visualise_emcee_samples(
     yerr = spitzer_analysis.tso_data.flux_errs
     sampler = spitzer_analysis.sampler
 
-    samples = sampler.get_chain()
-    n_chain_samples, nwalkers, ndim = samples.shape
+    n_chain_samples, _, ndim = sampler.get_chain().shape
     if n_chain_samples < 1000:
+        print('Too few samples to thin')
         burnin = 0
         discard = 0
         thin = 1
 
     flat_samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
-    n_flat_samples, ndim = flat_samples.shape
+    n_flat_samples, _ = flat_samples.shape
 
     n_flat_burnin = int(burnin * n_flat_samples)
-
     n_chain_burning = int(burnin * n_chain_samples)
 
     # Convert from decimal to ppm
     flat_samples = flat_samples.copy()[n_flat_burnin:]
-    samples = samples.copy()
 
     # TODO: Add upper and lower quantils into Corner plot labels
     perctiles = [16, 50, 84]
