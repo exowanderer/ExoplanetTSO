@@ -24,7 +24,7 @@ if __name__ == '__main__':
     mast_name = 'HAT-P-26b'
     inj_fpfs = 0 / ppm  # no injected signal
     init_fpfs = 265 / ppm  # initial guess from Wallack et al 2019
-    n_samples = 10000
+    n_samples = 1000
     nwalkers = 32
     aper_key = 'rad_2p5_0p0'
     centering_key = 'gaussian_fit'
@@ -62,7 +62,7 @@ if __name__ == '__main__':
         nwalkers=nwalkers,
         n_samples=n_samples,
         n_sig=n_sig,
-        estimate_pinknoise=True,
+        estimate_pinknoise=False,
         process_mcmc=False,
         run_full_pipeline=False,
         visualise_mle=False,

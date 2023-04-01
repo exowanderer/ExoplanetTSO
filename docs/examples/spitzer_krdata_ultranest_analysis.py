@@ -1,3 +1,4 @@
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -9,7 +10,6 @@ from exotso.utils import (
     visualise_mle_solution
 )
 
-
 if __name__ == '__main__':
     ppm = 1e6
     n_sig = 5
@@ -19,8 +19,8 @@ if __name__ == '__main__':
     mast_name = 'HAT-P-26b'
     inj_fpfs = 0 / ppm  # no injected signal
     init_fpfs = 265 / ppm  # no injected signal
-    min_num_live_points = 1000
-    aper_key = 'rad_2p5_0p0'
+    num_live_points = 400
+    # aper_key = 'rad_2p5_0p0'
     centering_key = 'gaussian_fit'
     # centering_key = 'fluxweighted'
     trim_size = 1/24  # one hour in day units
@@ -40,12 +40,18 @@ if __name__ == '__main__':
         'r64924672'
     ]
 
-    # hatp26b_krdata_batches = {}
-    for kaor_, aors_ in enumerate([aornums]):
-        df_hatp26b = grab_data_from_csv(filename=None, aornums=aors_)
+    df_hatp26b = grab_data_from_csv(filename=None, aornums=aornums)
 
+    aper_keys = [
+        col_.replace('flux_', '')
+        for col_ in df_hatp26b.columns if 'flux' in col_ and 'rad' in col_
+    ]
+    hatp26b_krdata_apers = {}
+    for kaor_, aper_key in enumerate(aper_keys[:1]):
+        aper_key = 'rad_2p5_0p0'
         hatp26b_krdata = ExoplanetUltranestTSO(
             df=df_hatp26b,
+            planet_name=planet_name,
             mast_name=mast_name,
             trim_size=trim_size,
             timebinsize=timebinsize,
@@ -81,10 +87,15 @@ if __name__ == '__main__':
         '''
 
         hatp26b_krdata.run_ultranest_pipeline(
-            min_num_live_points=min_num_live_points
+            num_live_points=num_live_points,
+            log_dir_extra=None
         )
-        # hatp26b_krdata.save_mle_ultranest()
-        hatp26b_krdata_all_live1000 = hatp26b_krdata
+
+        hatp26b_krdata.save_mle_ultranest(
+            num_live_points=num_live_points
+        )
+
+        hatp26b_krdata_apers[aper_key] = hatp26b_krdata
 
         sampler = hatp26b_krdata.sampler
         if np.median(sampler.run_sequence['samples'][:, 0]) < 1:
@@ -101,7 +112,10 @@ if __name__ == '__main__':
         visualise_ultranest_traces_corner(hatp26b_krdata, suptitle=None)
 
     if hatp26b_krdata.process_mcmc:
-        hatp26b_krdata.run_ultranest_pipeline()
+        hatp26b_krdata.run_ultranest_pipeline(
+            num_live_points=num_live_points,
+            log_dir_extra=None
+        )
 
     if hatp26b_krdata.visualise_mle:
         visualise_mle_solution(hatp26b_krdata)
@@ -125,7 +139,9 @@ if __name__ == '__main__':
         )
 
     if hatp26b_krdata.savenow:
-        hatp26b_krdata.save_mle_ultranest()
+        hatp26b_krdata.save_mle_ultranest(
+            num_live_points=num_live_points
+        )
 
     # phase_bins, phase_binned_flux, phase_binned_ferr = phase_bin_data(
     #     df,
