@@ -639,7 +639,7 @@ class ExoplanetUltranestTSO:
 
         if nbins is not None:
             ax1.errorbar(
-                binxvar, binflux, binflux_unc,
+                binxvar, binflux, yerr=binflux_unc, xerr=binxvar_unc,
                 fmt='o', ms=5, alpha=1.0, label='Binned Flux'
             )
 
