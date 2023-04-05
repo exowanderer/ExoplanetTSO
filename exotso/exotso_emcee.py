@@ -389,7 +389,39 @@ class ExoplanetEmceeTSO:
             self, fpfs=None, delta_ecenter=None, phase_fold=False,
             nbins=None, trim=None, ylim=None, xlim=None, fig=None,
             title=None, height_ratios=None, fontsize=20):
+        """
+        # Usage Case Expanding on Best Fit
+        fig, (ax1, ax2) = hatp26b_krdata.plot_bestfit_and_residuals(
+            fpfs=268/1e6,
+            delta_ecenter=-0.788/24,
+            phase_fold=True,
+            nbins=100,
+            fig=None,
+            trim=1/24,
+            ylim=[1-0.0014,1+0.0015],
+            height_ratios=[0.1, 0.9],
+            title=(
+                'HAT-P-26b Spitzer 8 CH2 AORs - AperRad:2.5 - '
+                '100 Bins Phase Folded'
+            )
+        )
 
+        # Usage Case Expanding on Residuals
+        fig, (ax1, ax2) = hatp26b_krdata.plot_bestfit_and_residuals(
+            fpfs=268/1e6,
+            delta_ecenter=-0.788/24,
+            phase_fold=True,
+            nbins=100,
+            fig=None,
+            trim=1/24,
+            ylim=[1-0.0014,1+0.0015],
+            height_ratios=[0.9, 0.1],
+            title=(
+                'HAT-P-26b Spitzer 8 CH2 AORs - AperRad:2.5 - '
+                '100 Bins Phase Folded'
+            )
+        )
+        """
         if height_ratios is None:
             height_ratios = [0.9, 0.1]
 
