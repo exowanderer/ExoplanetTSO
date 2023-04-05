@@ -610,14 +610,14 @@ class ExoplanetUltranestTSO:
             tcenter = self.tcenter
             xvar = ((xvar - tcenter) % period) / period
 
-        # Sort by by Time or Phase
-        argsort_xvar = xvar.argsort()
-        starflux = starflux[argsort_xvar]
-        fluxerr = fluxerr[argsort_xvar]
-        krsensmap = krsensmap[argsort_xvar]
-        residuals = residuals[argsort_xvar]
-        transit_model = transit_model[argsort_xvar]
-        xvar = xvar[argsort_xvar]
+            # Sort by by Time or Phase
+            argsort_xvar = xvar.argsort()
+            starflux = starflux[argsort_xvar]
+            fluxerr = fluxerr[argsort_xvar]
+            krsensmap = krsensmap[argsort_xvar]
+            residuals = residuals[argsort_xvar]
+            transit_model = transit_model[argsort_xvar]
+            xvar = xvar[argsort_xvar]
 
         if nbins is not None:
             binflux, binflux_unc = bin_array_time(xvar, starflux, nbins)
