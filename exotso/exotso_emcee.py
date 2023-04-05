@@ -347,6 +347,8 @@ class ExoplanetEmceeTSO:
         ppm = 1e6
         self.bm_params.fp = self.mcmc_estimates['fpfs'] / ppm
         self.bm_params.t_secondary = self.ecenter0 + delta_ecenter
+
+        # Compute the mcmc transit model
         self.mcmc_transit_model = self.batman_wrapper()
 
         self.mcmc_krdata_map = krdata.sensitivity_map(
@@ -357,6 +359,87 @@ class ExoplanetEmceeTSO:
 
         spitzer_transit_model = self.mcmc_transit_model * self.mcmc_krdata_map
         self.mcmc_residuals = self.tso_data.fluxes - spitzer_transit_model
+
+    def compute_bestfit_residuals(self, fpfs, delta_ecenter):
+
+        if fpfs > 1:
+            ppm = 1e6
+            fpfs = fpfs / ppm
+
+        ecenter = self.ecenter0 + delta_ecenter
+
+        # Compute the mcmc transit model
+        transit_model = self.batman_wrapper(
+            update_fpfs=fpfs,
+            update_ecenter=ecenter
+        )
+
+        krdata_map = krdata.sensitivity_map(
+            self.tso_data.fluxes / transit_model,
+            self.krdata_inputs.ind_kdtree,
+            self.krdata_inputs.gw_kdtree
+        )
+
+        spitzer_transit_model = transit_model * krdata_map
+        residuals = self.tso_data.fluxes - spitzer_transit_model
+
+        return residuals, transit_model, krdata_map
+
+    def plot_bestfit_and_residuals(
+            self, fpfs=None, delta_ecenter=None, phase_fold=False,
+            nbins=None, fig=None):
+        if fpfs is None:
+            ppm = 1e6
+            fpfs = self.mcmc_estimates['fpfs'] / ppm
+
+        if delta_ecenter is None:
+            delta_ecenter = self.mcmc_estimates['delta_center']
+
+        residuals, transit_model, krdata_map = self.compute_bestfit_residuals(
+            fpfs,
+            delta_ecenter
+        )
+
+        xvar = self.tso_data.times
+        fluxes = self.tso_data.fluxes
+
+        if phase_fold:
+            period = self.period
+            tcenter = self.tcenter
+            xvar = ((xvar - tcenter) % period) / period
+            argsort_xvar = xvar.argsort()
+            fluxes = fluxes[argsort_xvar]
+            krdata_map = krdata_map[argsort_xvar]
+            residuals = residuals[argsort_xvar]
+            xvar = xvar[argsort_xvar]
+
+        if fig is None:
+            fig, (ax1, ax2) = plt.subplots(
+                nrows=2,
+                height_ratios=[0.9, 0.1],
+                sharex=True
+            )
+        else:
+            ax1, ax2 = fig.get_axes()
+            ax1.clear()
+            ax2.clear()
+
+        ax1.plot(xvar, fluxes / krdata_map, '-', label='flux')
+        # ax1.plot(xvar, krdata_map, '-', label='flux')
+        ax2.plot(xvar, residuals, '-', label='Residuals')
+
+        plt.subplots_adjust(
+            left=None,
+            bottom=None,
+            right=None,
+            top=None,
+            wspace=None,
+            hspace=0.0,
+        )
+
+        plt.show()
+
+        return fig, (ax1, ax2)
 
     def preprocess_pipeline(self):
 

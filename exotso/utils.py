@@ -156,6 +156,27 @@ def bin_df_time(df, timebinsize=0):
     return med_binned, std_binned
 
 
+def bin_array_time(times, vector, nbins):
+
+    assert (nbins > 0), '`nbins` must be a positive integer'
+    assert (isinstance(nbins, int)), '`nbins` must be a positive integer'
+
+    time_bins = np.linspace(times.min(), times.max(), nbins)
+
+    n_pts_per_bin = times.size / nbins
+    delta_time = np.median(np.diff(time_bins))
+
+    med_binned = np.zeros_like(time_bins)
+    std_binned = np.zeros_like(time_bins)
+    for k, start in enumerate(time_bins):
+        end = start + delta_time
+        in_bin = (start <= times)*(times < end)
+        med_binned[k] = np.nanmedian(vector[in_bin])
+        std_binned[k] = np.nanstd(vector[in_bin]) / np.sqrt(n_pts_per_bin)
+
+    return med_binned, std_binned
+
+
 def trim_initial_timeseries(df, trim_size=0, aornums=None):
 
     if trim_size <= 0:

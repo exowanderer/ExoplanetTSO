@@ -14,6 +14,7 @@ except ImportError:
 
 from datetime import datetime, timezone
 from exomast_api import exoMAST_API
+from matplotlib import pyplot as plt
 from scipy.optimize import minimize
 from statsmodels.robust import scale
 from time import time
@@ -30,6 +31,7 @@ from .models import (
 
 from .utils import (
     bin_df_time,
+    bin_array_time,
     # get_truth_emcee_values,
     # linear_model,
     load_from_df,
@@ -502,6 +504,188 @@ class ExoplanetUltranestTSO:
         )
 
         print(f"ULtranest took { time() - start:.1f} seconds")
+
+    def postprocess_pipeline(self, discard=100, thin=15, burnin=0.2):
+        if self.verbose:
+            print_emcee_results(self.sampler, discard=100, thin=15, burnin=0.2)
+
+        self.mcmc_estimates = get_truth_emcee_values(
+            self.sampler,
+            discard=discard,
+            thin=thin,
+            burnin=burnin
+        )
+
+        delta_ecenter = self.mcmc_estimates['delta_center']
+
+        ppm = 1e6
+        self.bm_params.fp = self.mcmc_estimates['fpfs'] / ppm
+        self.bm_params.t_secondary = self.ecenter0 + delta_ecenter
+
+        # Compute the mcmc transit model
+        self.mcmc_transit_model = self.batman_wrapper()
+
+        self.mcmc_krdata_map = krdata.sensitivity_map(
+            self.tso_data.fluxes / self.mcmc_transit_model,
+            self.krdata_inputs.ind_kdtree,
+            self.krdata_inputs.gw_kdtree
+        )
+
+        spitzer_transit_model = self.mcmc_transit_model * self.mcmc_krdata_map
+        self.mcmc_residuals = self.tso_data.fluxes - spitzer_transit_model
+
+    def compute_bestfit_residuals(self, fpfs, delta_ecenter):
+
+        if fpfs > 1:
+            ppm = 1e6
+            fpfs = fpfs / ppm
+
+        ecenter = self.ecenter0 + delta_ecenter
+
+        # Compute the mcmc transit model
+        transit_model = self.batman_wrapper(
+            update_fpfs=fpfs,
+            update_ecenter=ecenter
+        )
+
+        krdata_map = krdata.sensitivity_map(
+            self.tso_data.fluxes / transit_model,
+            self.krdata_inputs.ind_kdtree,
+            self.krdata_inputs.gw_kdtree
+        )
+
+        spitzer_transit_model = transit_model * krdata_map
+        residuals = self.tso_data.fluxes - spitzer_transit_model
+
+        return residuals, transit_model, krdata_map
+
+    def plot_bestfit_and_residuals(
+            self, fpfs=None, delta_ecenter=None, phase_fold=False,
+            nbins=None, trim=None, ylim=None, xlim=None, fig=None,
+            title=None, height_ratios=None, fontsize=20):
+
+        if height_ratios is None:
+            height_ratios = [0.9, 0.1]
+
+        has_none = None in [fpfs, delta_ecenter]
+        if has_none and not hasattr(self, 'mcmc_estimates'):
+            self.postprocess_pipeline(discard=100, thin=15, burnin=0.2)
+
+        if fpfs is None:
+            ppm = 1e6
+            fpfs = self.mcmc_estimates['fpfs'] / ppm
+
+        if delta_ecenter is None:
+            delta_ecenter = self.mcmc_estimates['delta_center']
+
+        residuals, transit_model, krsensmap = self.compute_bestfit_residuals(
+            fpfs,
+            delta_ecenter
+        )
+
+        xvar = self.tso_data.times
+        starflux = self.tso_data.fluxes / krsensmap
+        fluxerr = self.tso_data.flux_errs
+
+        # Sort by time
+        argsort_xvar = xvar.argsort()
+        starflux = starflux[argsort_xvar]
+        fluxerr = fluxerr[argsort_xvar]
+        krsensmap = krsensmap[argsort_xvar]
+        residuals = residuals[argsort_xvar]
+        transit_model = transit_model[argsort_xvar]
+        xvar = xvar[argsort_xvar]
+
+        if trim is not None and trim > 0:
+            in_range = (xvar - xvar.min()) > trim
+            starflux = starflux[in_range]
+            fluxerr = fluxerr[in_range]
+            krsensmap = krsensmap[in_range]
+            residuals = residuals[in_range]
+            transit_model = transit_model[in_range]
+            xvar = xvar[in_range]
+
+        if phase_fold:
+            period = self.period
+            tcenter = self.tcenter
+            xvar = ((xvar - tcenter) % period) / period
+
+        # Sort by by Time or Phase
+        argsort_xvar = xvar.argsort()
+        starflux = starflux[argsort_xvar]
+        fluxerr = fluxerr[argsort_xvar]
+        krsensmap = krsensmap[argsort_xvar]
+        residuals = residuals[argsort_xvar]
+        transit_model = transit_model[argsort_xvar]
+        xvar = xvar[argsort_xvar]
+
+        if nbins is not None:
+            binflux, binflux_unc = bin_array_time(xvar, starflux, nbins)
+            binresiduals, binres_unc = bin_array_time(xvar, residuals, nbins)
+            binxvar, binxvar_unc = bin_array_time(xvar, xvar, nbins)
+
+        if fig is None:
+            fig, (ax1, ax2) = plt.subplots(
+                nrows=2,
+                height_ratios=height_ratios,
+                sharex=True
+            )
+        else:
+            ax1, ax2 = fig.get_axes()
+            ax1.clear()
+            ax2.clear()
+
+        ax1.plot(xvar, starflux, '.', ms=2, alpha=0.2, label='Flux')
+
+        if nbins is not None:
+            ax1.errorbar(
+                binxvar, binflux, binflux_unc,
+                fmt='o', ms=5, alpha=1.0, label='Binned Flux'
+            )
+
+        ax1.plot(xvar, transit_model, '-', lw=3, label='Transit')
+
+        ax2.plot(xvar, residuals, '.', ms=2, alpha=0.2, label='Residuals')
+
+        if nbins is not None:
+            ax2.errorbar(
+                binxvar, binresiduals, binres_unc,
+                fmt='o', ms=5, alpha=1.0, label='Binned Residuals'
+            )
+
+        ax2.plot(xvar, 0*xvar, '--', lw=3, label='Null')
+
+        # ax1.legend(fontsize=fontsize)
+        # ax2.legend(fontsize=fontsize)
+
+        plt.subplots_adjust(
+            left=None,
+            bottom=None,
+            right=None,
+            top=None,
+            wspace=None,
+            hspace=0.0,
+        )
+
+        if ylim is not None:
+            ax1.set_ylim(ylim)
+            ax2.set_ylim([y_ - 1 for y_ in ylim])
+
+        ax1.set_xlim(xlim)
+
+        for tick in ax1.yaxis.get_ticklabels():
+            tick.set_fontsize(fontsize=fontsize)
+        for tick in ax2.xaxis.get_ticklabels():
+            tick.set_fontsize(fontsize=fontsize)
+        for tick in ax2.yaxis.get_ticklabels():
+            tick.set_fontsize(fontsize=fontsize)
+
+        if title is not None:
+            fig.suptitle(title, fontsize=fontsize)
+
+        plt.show()
+
+        return fig, (ax1, ax2)
 
     def preprocess_pipeline(self):
 

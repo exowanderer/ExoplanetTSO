@@ -77,6 +77,8 @@ def run_one(aper_key):
     #     hatp26b_krdata.ultranest_results = results
 
     # visualise_ultranest_traces_corner(hatp26b_krdata, suptitle=None)
+    
+    return hatp26b_krdata
 
 
 if __name__ == '__main__':
