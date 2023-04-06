@@ -327,8 +327,8 @@ class ExoplanetTSO:
                 Defaults to None.
             init_logf (float, optional): initial guess from external source
                 range: [-inf, 1]. Defaults to -5.0.
-            spread (float, optional): distribution around intial guesses.
-                Defaults to 1e-4.
+            spread (float, optional): Width of distribution around intial 
+                guesses. Defaults to 1e-4.
             seed (int, optional): random seed for np.random.seed.
                 Defaults to None.
         """
@@ -406,7 +406,7 @@ class ExoplanetTSO:
             self.init_params['fpfs'] = np.random.normal(init_fpfs, 1e-5)
 
         # nll = lambda *args: -self.log_ultranest_likelihood(*args)
-        nlp = lambda *args: -self.log_mle_probability(*args)
+        nlp = lambda *args: -self.log_mle_posterior(*args)
 
         if self.verbose:
             print('Initial Params:')
@@ -911,7 +911,7 @@ class ExoplanetTSO:
             else -np.inf
         )
 
-    def log_mle_probability(self, params):
+    def log_mle_posterior(self, params):
         """ Compute the log_posterior probability for each parameter values
 
         Args:
@@ -1504,12 +1504,25 @@ class ExoplanetEmceeTSO:
             self.full_emcee_pipeline()
 
     def full_emcee_pipeline(self):
+        """ Runs a sequence of subroutines for the emcee pipeline
+
+            1. self.initialise_data_and_params
+            2. self.run_mle_pipeline
+            3. self.run_emcee_pipeline
+            4. self.save_mle_emcee
+            5. visualise_mle_solution
+            6. visualise_emcee_traces_corner
+            7. visualise_emcee_samples
+        """
         self.initialise_data_and_params()
 
         self.run_mle_pipeline()
 
         if self.process_mcmc:
             self.run_emcee_pipeline()
+
+        if self.savenow:
+            self.save_mle_emcee()
 
         if self.visualise_mle:
             visualise_mle_solution(self)
@@ -1532,10 +1545,13 @@ class ExoplanetEmceeTSO:
                 verbose=False
             )
 
-        if self.savenow:
-            self.save_mle_emcee()
-
     def run_emcee_pipeline(self, alpha=1e-4):
+        """ Operate a set of subroutines leading to the full emcee pipelines
+
+            Args:
+                alpha (float): Width of distribution around intial guesses.
+                Defaults to 1e-4.
+        """
         # Emcee Sampling
         init_distro = alpha * np.random.randn(self.nwalkers, len(self.soln.x))
 
@@ -1551,7 +1567,7 @@ class ExoplanetEmceeTSO:
         # TODO: Understand why `pool=pool` stopped working after working well
         # with Pool(cpu_count()-1) as pool:
         self.sampler = emcee.EnsembleSampler(
-            nwalkers, ndim, self.log_emcee_probability,  # pool=pool
+            nwalkers, ndim, self.log_emcee_posterior,  # pool=pool
         )
 
         start = time()
@@ -1559,6 +1575,14 @@ class ExoplanetEmceeTSO:
         print(f"Emcee took { time() - start:.1f} seconds")
 
     def emcee_postprocess_pipeline(self, discard=100, thin=15, burnin=0.2):
+        """ From the process Encee pipeline, compute the estimate of the
+            fitted parameters and the corresponding transit model + residuals
+
+            Args:
+                discard (int): The number of samples to discard from chains
+                thin (int): The number of samples to thin chains
+                burnin (float): The percent of samples to discard: range: [0, 1]
+        """
         if self.verbose:
             print_emcee_results(self.sampler, discard=100, thin=15, burnin=0.2)
 
@@ -1588,6 +1612,14 @@ class ExoplanetEmceeTSO:
         self.mcmc_residuals = self.tso_data.fluxes - spitzer_transit_model
 
     def log_emcee_prior(self, theta):
+        """ Compute prior probabilities per parameter in chain
+
+            Input a set of sample `theta` compute the corresponding prior 
+                probabilities from (here) uniform boundaries
+
+            Args:
+                theta (list, tuple): (n,) list of n prior samples from `emcee`
+        """
         # return 0  # Open prior
         fpfs, delta_ecenter, log_f = theta[:3]  #
         sigma_w, sigma_r = theta[3:5] if self.estimate_pinknoise else (1, 1)
@@ -1622,6 +1654,14 @@ class ExoplanetEmceeTSO:
         )
 
     def log_emcee_likelihood(self, theta):
+        """Compute the normal (and wavelet) log likelihoods
+
+        Args:
+            theta (list): List of fitting parameters to be used
+
+        Returns:
+            float: log likelihood given the fitting parameters
+        """
         fpfs, delta_ecenter, log_f = theta[:3]  #
 
         self.bm_params.fp = fpfs
@@ -1653,7 +1693,15 @@ class ExoplanetEmceeTSO:
 
         return normal_log_likelihood + wavelet_log_likelihood
 
-    def log_emcee_probability(self, theta):
+    def log_emcee_posterior(self, theta):
+        """ Compute the log_posterior probability for each parameter values
+
+        Args:
+            params (tuples): list of parameters for fitting
+
+        Return:
+            (float): the log_prior + log_likelihood
+        """
         lp = self.log_emcee_prior(theta)
 
         return (
@@ -1662,6 +1710,11 @@ class ExoplanetEmceeTSO:
         )
 
     def save_mle_emcee(self, filename=None):
+        """ Save function for ultranest and mle results
+
+            Args:
+                filename (str): Path + filename to save the results
+        """
         discard = 0
         thin = 1
         self.tau = []
@@ -1687,6 +1740,13 @@ class ExoplanetEmceeTSO:
         print(f'Saved emcee and mle results to {filename}')
 
     def load_mle_emcee(self, filename=None, isotime=None):
+        """ Load function for ultranest and mle results
+
+            Args:
+                filename (str): Path + filename from which load the results
+                isotime (str): ISO Formatted time string to identify the
+                    UltraNest results to be loaded.
+        """
 
         assert (filename is not None or isotime is None), \
             'Please provide either `filename` or `isotime`'
