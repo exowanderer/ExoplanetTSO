@@ -2,14 +2,14 @@ import numpy as np
 from dataclasses import dataclass
 
 
-@ dataclass
+@dataclass
 class KRDataInputs:
     ind_kdtree: np.ndarray = None
     gw_kdtree: np.ndarray = None
     fluxes: np.ndarray = None
 
 
-@ dataclass
+@dataclass
 class MCMCArgs:
     times: np.ndarray = None
     fluxes: np.ndarray = None
@@ -35,7 +35,7 @@ class MCMCArgs:
     transit_type: str = 'secondary'
 
 
-@ dataclass
+@dataclass
 class ExoplanetTSOData:
     times: np.ndarray = None
     fluxes: np.ndarray = None
@@ -47,3 +47,25 @@ class ExoplanetTSOData:
     ycenters: np.ndarray = None
     xwidths: np.ndarray = None
     ywidths: np.ndarray = None
+
+
+@dataclass
+class exoMastParams:
+    period: float = None
+    tcenter: float = None
+    inc: float = None
+    aprs: float = None
+    tdepth: float = None
+    rprs: float = None
+    ecc: float = None
+    omega: float = None
+    u1: float = None
+    u2: float = None
+    offset: float = None
+    slope: float = None
+    curvature: float = None
+    ldtype: float = None
+    transit_type: float = None
+    ecenter: float = None
+    ecenter0: float = None
+    fpfs: float = None

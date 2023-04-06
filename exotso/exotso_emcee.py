@@ -48,9 +48,12 @@ class ExoplanetEmceeTSO:
     def __init__(
             self, df=None, aor_dir=None, channel=None, planet_name=None,
             trim_size=0, timebinsize=0, mast_name=None, n_samples=1000,
-            inj_fpfs=0, nwalkers=32, centering_key=None, aper_key=None,
+            nwalkers=32, centering_key=None, aper_key=None,
             init_fpfs=None, estimate_pinknoise=False, n_piecewise_params=0,
-            n_sig=5, process_mcmc=False, run_full_pipeline=False, savenow=False, visualise_mle=False, visualise_chains=False, visualise_mcmc_results=False, standardise_fluxes=False, standardise_times=False, standardise_centers=False, verbose=False):
+            n_sig=5, process_mcmc=False, run_full_pipeline=False,
+            savenow=False, visualise_mle=False, visualise_chains=False,
+            visualise_mcmc_results=False, standardise_fluxes=False,
+            standardise_times=False, standardise_centers=False, verbose=False):
 
         self.df = df
         self.aor_dir = aor_dir
@@ -63,7 +66,6 @@ class ExoplanetEmceeTSO:
         self.nwalkers = nwalkers
         self.estimate_pinknoise = estimate_pinknoise and HAS_PINKNOISE
         self.n_piecewise_params = n_piecewise_params
-        self.inj_fpfs = inj_fpfs
         self.init_fpfs = init_fpfs
         self.process_mcmc = process_mcmc
         self.savenow = savenow
@@ -104,9 +106,6 @@ class ExoplanetEmceeTSO:
 
         if self.estimate_pinknoise:
             self.configure_pinknoise_model()
-
-        if self.inj_fpfs > 0:
-            self.inject_eclipse()
 
     def initialise_bm_params(self):
         # object to store transit parameters
@@ -240,43 +239,6 @@ class ExoplanetEmceeTSO:
                 '`self.batman_fittable_param`: \n' +
                 ', '.join(self.batman_fittable_param)
             )
-
-    def inject_eclipse(self, inj_fpfs=None):
-        """ For simulated eclipses and testing"""
-        ppm = 1e6
-
-        if inj_fpfs is None:
-            inj_fpfs = self.inj_fpfs
-
-        print(f'Injecting Model with FpFs: {self.inj_fpfs*ppm}ppm')
-
-        # Inject a signal if `inj_fpfs` as provided
-        inj_model = self.batman_wrapper(
-            self.tso_data.times,
-            period=self.period,
-            tcenter=self.tcenter,
-            inc=self.inc,
-            aprs=self.aprs,
-            rprs=self.rprs,
-            ecc=self.ecc,
-            omega=self.omega,
-            u1=self.u1,
-            u2=self.u2,
-            offset=self.offset,
-            slope=self.slope,
-            curvature=self.curvature,
-            ecenter=self.ecenter,
-            fpfs=inj_fpfs,
-            ldtype=self.ldtype,  # ='uniform',
-            transit_type=self.transit_type,  # ='secondary',
-            verbose=self.verbose
-        )
-
-        # Inject eclipse into flux time series
-        self.fluxes = self.fluxes * inj_model
-
-        # Store injected flux in tso_data
-        self.tso_data.fluxes = self.fluxes
 
     def run_mle_pipeline(self, init_fpfs=None):
 

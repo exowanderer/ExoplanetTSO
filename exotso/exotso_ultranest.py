@@ -50,15 +50,78 @@ class ExoplanetUltranestTSO:
 
     def __init__(
             self, df=None, aor_dir=None, channel=None, planet_name=None,
-            trim_size=0, timebinsize=0, mast_name=None, n_fits=1000,
-            inj_fpfs=0, estimate_pinknoise=False, centering_key=None,
+            trim_size=0, timebinsize=0, mast_name=None, n_fits=400,
+            estimate_pinknoise=False, centering_key=None,
             aper_key=None, init_fpfs=None, n_piecewise_params=0, n_sig=5,
             process_mcmc=False, run_full_pipeline=False,
             log_dir='ultranest_savedir', savenow=False,
-            visualise_mle=False, visualise_nests=False,
-            visualise_mcmc_results=False, standardise_fluxes=False,
+            visualise_mle=False, visualise_traces_corner=False,
+            visualise_samples=False, standardise_fluxes=False,
             standardise_times=False, standardise_centers=False, verbose=False):
+        """Ultranest focused object for analysing time series observations.
 
+        Args:
+            df (pd.DataFrame, optional): base dateframe with times, flux, 
+                errors, and other vectors (e.g., xcenters, ycenters) useful for 
+                noise modeling. Defaults to None.
+            aor_dir (str, optional): location of processed data to load. Only 
+                used if loading data from the output of the `wanderer` package. 
+                Defaults to None.
+            channel (str, optional): Spitzer channel directory of stored data. 
+                Only used if loading data from the output of the `wanderer` 
+                package. Defaults to None.
+            planet_name (str, optional): name of planet for load and save 
+                functions. Defaults to None.
+            trim_size (float, optional): days to trim from start of each AOR. 
+                Defaults to 0.
+            timebinsize (float, optional): width in days (or `times` similar 
+                value).  Defaults to 0.
+            mast_name (str, optional): name of planet in MAST registry. 
+                Defaults to None.
+            n_fits (int, optional): Used with ultranest plotting. How many 
+                samples to plot. Defaults to 400.
+            estimate_pinknoise (bool, optional): toggle for whether to include 
+                Carter&Winn2010 wavelet likelihood (`pinknoise`) likelihood. 
+                Defaults to False.
+            centering_key (str, optional): Base for the column name of center 
+                values: `fluxweighted` or `gaussian_fit`. Defaults to None.
+            aper_key (str, optional): Base for column name for flux values. 
+                Defaults to None.
+            init_fpfs (float, optional): Initial guess for the eclipse depth 
+                (fpfs). Defaults to None.
+            n_piecewise_params (int, optional): whether to include an offset 
+                (=1) or slope (=2) per AOR with multi AOR observations. 
+                Defaults to 0.
+            n_sig (int, optional): Number of sigma for Gaussian thresholding. 
+                Defaults to 5.
+            process_mcmc (bool, optional): Toggle whether to activate the mcmc 
+                subroutines. Defaults to False.
+            run_full_pipeline (bool, optional): Toggle whether to activate the 
+                full analysis pipeline. Defaults to False.
+            log_dir (str, optional): Directory with which to save the ultranest 
+                output and log files. Defaults to 'ultranest_savedir'.
+            savenow (bool, optional): Toggle whether to activate the save to 
+                joblib subroutines. Defaults to False.. Defaults to False.
+            visualise_mle (bool, optional): Toggle whether to activate the MLE 
+                plotting subroutine. Defaults to False.
+            visualise_traces_corner (bool, optional): Toggle whether to 
+                activate the UltraNest trace and corner plotting subroutine. 
+                Defaults to False.
+            visualise_samples (bool, optional): Toggle whether to activate the 
+                UltraNest samples over time plotting subroutine. 
+                Defaults to False.
+            standardise_fluxes (bool, optional): Toggle whether to 
+                gaussian-filter the flux values to remove n_sig outliers. 
+                Defaults to False.
+            standardise_times (bool, optional): Toggle whether to 
+                median-center the time values to reduce complexity with 
+                optimsations.  Defaults to False. 
+            standardise_centers (bool, optional): Toggle whether to 
+                median-center the centering values to reduce complexity with 
+                optimsations.  Defaults to False.
+            verbose (bool, optional): Toggle whether to activate excessing 
+                print to stdout. Defaults to False.
+        """
         self.df = df
         self.aor_dir = aor_dir
         self.channel = channel
@@ -69,14 +132,13 @@ class ExoplanetUltranestTSO:
         self.n_fits = n_fits
         self.estimate_pinknoise = estimate_pinknoise and HAS_PINKNOISE
         self.n_piecewise_params = n_piecewise_params
-        self.inj_fpfs = inj_fpfs
         self.init_fpfs = init_fpfs
         self.process_mcmc = process_mcmc
         self.log_dir = log_dir
         self.savenow = savenow
         self.visualise_mle = visualise_mle
-        self.visualise_mcmc_results = visualise_mcmc_results
-        self.visualise_nests = visualise_nests
+        self.visualise_samples = visualise_samples
+        self.visualise_traces_corner = visualise_traces_corner
         self.trim_size = trim_size
         self.timebinsize = timebinsize
         self.centering_key = centering_key
@@ -110,9 +172,6 @@ class ExoplanetUltranestTSO:
 
         if self.estimate_pinknoise:
             self.configure_pinknoise_model()
-
-        if self.inj_fpfs > 0:
-            self.inject_eclipse()
 
     def initialise_bm_params(self):
         # object to store transit parameters
@@ -166,10 +225,10 @@ class ExoplanetUltranestTSO:
         if self.visualise_mle:
             visualise_mle_solution(self)
 
-        if self.visualise_nests:
+        if self.visualise_traces_corner:
             visualise_ultranest_traces_corner(self)
 
-        if self.visualise_mcmc_results:
+        if self.visualise_samples:
             visualise_ultranest_samples(
                 self,
                 discard=100,
@@ -383,39 +442,6 @@ class ExoplanetUltranestTSO:
             )
     """
 
-    def inject_eclipse(self):
-        ppm = 1e6
-
-        print(f'Injecting Model with FpFs: {self.inj_fpfs*ppm}ppm')
-
-        # Inject a signal if `inj_fpfs` is provided
-        inj_model = self.batman_wrapper(
-            self.tso_data.times,
-            period=self.period,
-            tcenter=self.tcenter,
-            inc=self.inc,
-            aprs=self.aprs,
-            rprs=self.rprs,
-            ecc=self.ecc,
-            omega=self.omega,
-            u1=self.u1,
-            u2=self.u2,
-            offset=self.offset,
-            slope=self.slope,
-            curvature=self.curvature,
-            ecenter=self.ecenter,
-            fpfs=self.inj_fpfs,
-            ldtype=self.ldtype,  # ='uniform',
-            transit_type=self.transit_type,  # ='secondary',
-            verbose=self.verbose
-        )
-
-        # print(fluxes.mean(), inj_model.min(), inj_model.max())
-        self.fluxes = self.fluxes * inj_model
-
-        self.tso_data.fluxes = self.fluxes
-        self.krdata_inputs.fluxes = self.fluxes
-
     def run_mle_pipeline(self, init_fpfs=None):
 
         if init_fpfs is not None:
@@ -562,7 +588,8 @@ class ExoplanetUltranestTSO:
     def plot_bestfit_and_residuals(
             self, fpfs=None, delta_ecenter=None, phase_fold=False,
             nbins=None, trim=None, ylim=None, xlim=None, fig=None,
-            title=None, height_ratios=None, fontsize=20):
+            title=None, height_ratios=None, fontsize=20, shownow=False,
+            figsize=(20, 10)):
         """
         # Usage Case Expanding on Best Fit
         fig, (ax1, ax2) = hatp26b_krdata.plot_bestfit_and_residuals(
@@ -661,7 +688,8 @@ class ExoplanetUltranestTSO:
             fig, (ax1, ax2) = plt.subplots(
                 nrows=2,
                 height_ratios=height_ratios,
-                sharex=True
+                sharex=True,
+                figsize=figsize
             )
         else:
             ax1, ax2 = fig.get_axes()
@@ -716,7 +744,10 @@ class ExoplanetUltranestTSO:
         if title is not None:
             fig.suptitle(title, fontsize=fontsize)
 
-        plt.show()
+        if shownow:
+            plt.show()
+
+        plt.tight_layout()
 
         return fig, (ax1, ax2)
 
@@ -944,7 +975,7 @@ class ExoplanetUltranestTSO:
         return piecewise_offset
     """
 
-    @staticmethod
+    @ staticmethod
     def log_mle_prior(params):
         # return 0  # Open prior
         fpfs, delta_ecenter, log_f = params[:3]  #

@@ -267,6 +267,36 @@ def batman_wrapper(
     return m_eclipse.light_curve(bm_params)
 
 
+def inject_eclipse(inj_fpfs, times, fluxes, planet_params, verbose=False):
+    ppm = 1e6
+
+    print(f'Injecting Model with FpFs: {inj_fpfs * ppm}ppm')
+
+    # Inject a signal if `inj_fpfs` is provided
+    inj_model = batman_wrapper(
+        times,
+        period=planet_params['period'],
+        tcenter=planet_params['tcenter'],
+        inc=planet_params['inc'],
+        aprs=planet_params['aprs'],
+        rprs=planet_params['rprs'],
+        ecc=planet_params['ecc'],
+        omega=planet_params['omega'],
+        u1=planet_params['u1'],
+        u2=planet_params['u2'],
+        offset=planet_params['offset'],
+        slope=planet_params['slope'],
+        curvature=planet_params['curvature'],
+        ecenter=planet_params['ecenter'],
+        fpfs=inj_fpfs,
+        ldtype=planet_params['ldtype'],  # ='uniform',
+        transit_type=planet_params['transit_type'],  # ='secondary',
+        verbose=verbose
+    )
+
+    return fluxes * inj_model
+
+
 def batman_plotting_wrapper(spitzer_analysis, fpfs=0, delta_ecenter=0):
     return batman_wrapper(
         times=spitzer_analysis.tso_data.times,
@@ -324,7 +354,8 @@ def load_from_df(df, aper_key=None, centering_key=None):
 
 
 def load_from_wanderer(
-        planet_name, channel, aor_dir, aper_key=None, centering_key=None):
+        wanderer_inst=None, planet_name=None, channel=None, aor_dir=None,
+        aper_key=None, centering_key=None):
 
     if not HAS_WANDERER:
         raise ImportError(
@@ -332,24 +363,30 @@ def load_from_wanderer(
             'https://github.com/exowanderer/wanderer'
         )
 
-    wanderer_, data_config = load_wanderer_instance_from_file(
-        planet_name=planet_name,
-        channel=channel,
-        aor_dir=aor_dir,  # 'r64924928',  # 'r42621184',
-        check_defaults=False,
-        shell=False
-    )
+    if wanderer_inst is None:
+        assert (None not in [planet_name, channel, aor_dor]), (
+            'please provide either an instance of wanderer or the inputs '
+            'required to create one: (`planet_name`, `channel`, `aor_dor`)'
+        )
+
+        wanderer_inst, _ = load_wanderer_instance_from_file(
+            planet_name=planet_name,
+            channel=channel,
+            aor_dir=aor_dir,
+            check_defaults=False,
+            shell=False
+        )
 
     if aper_key is not None:
         aper_key = 'gaussian_fit_annular_mask_rad_2.5_0.0'
 
-    times = wanderer_.time_cube
-    fluxes = wanderer_.flux_tso_df[aper_key].values
-    flux_errs = wanderer_.noise_tso_df[aper_key].values
+    times = wanderer_inst.time_cube
+    fluxes = wanderer_inst.flux_tso_df[aper_key].values
+    flux_errs = wanderer_inst.noise_tso_df[aper_key].values
     aornums = np.array([aor_dir] * times.size)
-    ycenters = wanderer_.centering_df[f'{centering_key}_ycenters'].values
-    xcenters = wanderer_.centering_df[f'{centering_key}_xcenters'].values
-    npix = wanderer_.effective_widths
+    ycenters = wanderer_inst.centering_df[f'{centering_key}_ycenters'].values
+    xcenters = wanderer_inst.centering_df[f'{centering_key}_xcenters'].values
+    npix = wanderer_inst.effective_widths
 
     return ExoplanetTSOData(
         times=times,
@@ -931,9 +968,76 @@ def get_truth_emcee_values(sampler, discard=100, thin=15, burnin=0.2):
     return dict(zip(get_labels(), so_called_truth))
 
 
+def print_ultranest_results(sampler, discard=100, thin=15, burnin=0.2):
+    raise NotImplementedError('`print_ultranest_results` is not implemented')
+    n_chain_samples, _, ndim = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
+
+    flat_samples = flatten_chains(
+        sampler,
+        discard=discard,
+        thin=thin,
+        burnin=burnin
+    )
+
+    labels = get_labels(ndim)
+
+    for i in range(len(labels)):
+        mcmc = np.percentile(flat_samples[:, i], [16, 50, 84])
+        q = np.diff(mcmc)
+        if labels[i] == 'fpfs':
+            mcmc[1] = mcmc[1]*1e6
+            q = q * 1e6
+
+        txt = f"{labels[i]} = {mcmc[1]:.4f}_-{q[0]:.4f}^{q[1]:.4f}"
+        print(txt)
+
+
+def get_truth_ultranest_values(sampler, discard=100, thin=15, burnin=0.2):
+    raise NotImplementedError(
+        '`get_truth_ultranest_values` is not implemented'
+    )
+    n_chain_samples, _, ndim = sampler.get_chain().shape
+    if n_chain_samples < 1000:
+        burnin = 0
+        discard = 0
+        thin = 1
+
+    flat_samples = flatten_chains(
+        sampler,
+        discard=discard,
+        thin=thin,
+        burnin=burnin
+    )
+
+    # TODO: Add upper and lower quantils into Corner plot labels
+    perctiles = [16, 50, 84]
+    _, fpfs_mcmc, _ = np.percentile(flat_samples[:, 0], perctiles)
+    _, delta_ecenter_mcmc, _ = np.percentile(flat_samples[:, 1], perctiles)
+    _, log_f_mcmc, _ = np.percentile(flat_samples[:, 2], perctiles)
+
+    so_called_truth = [fpfs_mcmc*1e6, delta_ecenter_mcmc, log_f_mcmc]  #
+
+    if ndim >= 5:
+        _, sigma_w_mcmc, _ = np.percentile(flat_samples[:, 3], perctiles)
+        _, sigma_r_mcmc, _ = np.percentile(flat_samples[:, 4], perctiles)
+
+        so_called_truth.extend([sigma_w_mcmc, sigma_r_mcmc])
+
+    if ndim == 6:
+        _, gamma_mcmc, _ = np.percentile(flat_samples[:, 5], perctiles)
+        so_called_truth.append(gamma_mcmc)
+
+    return dict(zip(get_labels(), so_called_truth))
+
 # sourcery skip: extract-duplicate-method
 # sourcery skip: extract-duplicate-method
 # sourcery skip: extract-duplicate-method
+
+
 def visualise_emcee_traces_corner(
         spitzer_analysis, discard=100, thin=15, burnin=0.2, verbose=False):
 
