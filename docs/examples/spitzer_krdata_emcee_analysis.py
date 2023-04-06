@@ -3,7 +3,8 @@ import pandas as pd
 from datetime import datetime, timezone
 from matplotlib import pyplot as plt
 
-from exotso.exotso_emcee import ExoplanetEmceeTSO
+# from exotso.exotso_emcee import ExoplanetEmceeTSO
+from exotso import ExoplanetEmceeTSO
 from exotso.utils import (
     grab_data_from_csv,
     print_mle_results,

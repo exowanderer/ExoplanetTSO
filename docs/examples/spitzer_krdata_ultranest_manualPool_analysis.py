@@ -4,7 +4,8 @@ import pandas as pd
 
 from multiprocessing import Pool, cpu_count
 
-from exotso.exotso_ultranest import ExoplanetUltranestTSO
+# from exotso.exotso_ultranest import ExoplanetUltranestTSO
+from exotso import ExoplanetUltranestTSO
 from exotso.utils import (
     grab_data_from_csv,
     visualise_ultranest_traces_corner,
@@ -77,7 +78,7 @@ def run_one(aper_key):
     #     hatp26b_krdata.ultranest_results = results
 
     # visualise_ultranest_traces_corner(hatp26b_krdata, suptitle=None)
-    
+
     return hatp26b_krdata
 
 

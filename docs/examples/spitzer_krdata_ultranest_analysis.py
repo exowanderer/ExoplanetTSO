@@ -2,7 +2,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from exotso.exotso_ultranest import ExoplanetUltranestTSO
+# from exotso.exotso_ultranest import ExoplanetUltranestTSO
+from exotso import ExoplanetUltranestTSO
 from exotso.utils import (
     grab_data_from_csv,
     visualise_ultranest_traces_corner,
