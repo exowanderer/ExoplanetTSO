@@ -196,9 +196,9 @@ class ExoplanetTSO:
                 the `batman.TransitParams` object
         """
 
-        if not hasattr(self, 'period'):
+        if not hasattr(self, 'planet_params'):
             print(
-                '[WARNIGN] Planetary parameters do not exist. Loading from '
+                '[WARNING] Planetary parameters do not exist. Loading from '
                 'exoMAST via `https://github.com/exowanderer/exoMAST_API`'
             )
             self.configure_planet_info()
@@ -982,8 +982,8 @@ class ExoplanetTSO:
             print('Assuming Rp_Rs == sqrt(transit_depth)')
             planet_info.Rp_Rs = np.sqrt(planet_info.transit_depth)
 
-        tcenter = self.planet_params.tcenter
-        init_ecenter = tcenter + 0.5 * self.planet_params.period
+        tcenter = planet_info.transit_time
+        init_ecenter = tcenter + 0.5 * planet_info.orbital_period
 
         self.planet_params = exoMastParams(
             period=planet_info.orbital_period,
@@ -1038,7 +1038,7 @@ class ExoplanetUltranestTSO(ExoplanetTSO):
     def __init__(
             self, exotso_inst=None, df=None, aor_dir=None, channel=None,
             planet_name=None, trim_size=0, timebinsize=0, mast_name=None,
-            n_fits=400, estimate_pinknoise=False, centering_key=None,
+            estimate_pinknoise=False, centering_key=None,
             aper_key=None, init_fpfs=None, n_piecewise_params=0, n_sig=5,
             process_ultranest=False, run_full_pipeline=False,
             log_dir='ultranest_savedir', savenow=False,
@@ -1068,8 +1068,6 @@ class ExoplanetUltranestTSO(ExoplanetTSO):
                 value).  Defaults to 0.
             mast_name (str, optional): name of planet in MAST registry.
                 Defaults to None.
-            n_fits (int, optional): Used with ultranest plotting. How many
-                samples to plot. Defaults to 400.
             estimate_pinknoise (bool, optional): toggle for whether to include
                 Carter&Winn2010 wavelet likelihood (`pinknoise`) likelihood.
                 Defaults to False.
@@ -1127,7 +1125,6 @@ class ExoplanetUltranestTSO(ExoplanetTSO):
                 mast_name=mast_name,
                 centering_key=centering_key,
                 aper_key=aper_key,
-                n_fits=n_fits,
                 estimate_pinknoise=estimate_pinknoise and HAS_PINKNOISE,
                 n_piecewise_params=n_piecewise_params,
                 init_fpfs=init_fpfs,

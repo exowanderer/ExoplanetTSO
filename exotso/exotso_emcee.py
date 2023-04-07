@@ -508,9 +508,17 @@ class ExoplanetEmceeTSO:
         return fig, (ax1, ax2)
 
     def preprocess_pipeline(self):
+        """ Pre-process the data from the df or wanderer instance
 
+            Runs:
+                1. trim_initial_timeseries
+                2. bin_df_time
+                3. load_from_df or load_from_wanderer
+                4. flags NaNs and Outliers
+                5. returns instance of ExoplanetTSOData
+        """
         if self.trim_size > 0:
-            df = trim_initial_timeseries(
+            self.df = trim_initial_timeseries(
                 df=self.df,
                 trim_size=self.trim_size,
                 aornums=self.df.aornum.unique()

@@ -2,6 +2,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from functools import partial
 from multiprocessing import Pool, cpu_count
 
 # from exotso.exotso_ultranest import ExoplanetUltranestTSO
@@ -14,7 +15,22 @@ from exotso.utils import (
 )
 
 
-def run_one(aper_key):
+def run_one(
+    aper_key,
+    n_sig=5,
+    aor_dir='r64922368',
+    channel='ch2',  # CHANNEL SETTING
+    planet_name='hatp26b',
+    mast_name='HAT-P-26b',
+    inj_fpfs=0 / 1e6,  # no injected signal
+    init_fpfs=265 / 1e6,  # no injected signal
+    num_live_points=400,
+    # aper_key = 'rad_2p5_0p0',
+    centering_key='gaussian_fit',
+    # centering_key = 'fluxweighted',
+    trim_size=1/24,  # one hour in day units
+    timebinsize=0/60/24  # 0 minutes in day units
+):
     print(f'Running Ultranest on {aper_key}')
     hatp26b_krdata = ExoplanetUltranestTSO(
         df=df_hatp26b,
@@ -25,14 +41,13 @@ def run_one(aper_key):
         centering_key=centering_key,
         aper_key=aper_key,
         log_dir='ultranest_savedir',
-        inj_fpfs=0,
         init_fpfs=init_fpfs,
         n_sig=n_sig,
-        process_mcmc=False,
+        process_ultranest=False,
         run_full_pipeline=False,
         visualise_mle=False,
-        visualise_nests=False,
-        visualise_mcmc_results=False,
+        visualise_traces_corner=False,
+        visualise_samples=False,
         savenow=False,
         standardise_fluxes=True,
         standardise_times=False,
@@ -118,8 +133,20 @@ if __name__ == '__main__':
         col_.replace('flux_', '')
         for col_ in df_hatp26b.columns if 'flux' in col_ and 'rad' in col_
     ]
+    run_partial_one = partial(
+        run_one,
+        n_sig=n_sig,
+        aor_dir=aor_dir,
+        channel=channel,  # CHANNEL SETTING
+        planet_name=planet_name,
+        mast_name=mast_name,
+        inj_fpfs=inj_fpfs,  # no injected signal
+        init_fpfs=init_fpfs,  # no injected signal
+        num_live_points=num_live_points,
+        centering_key=centering_key,
+        trim_size=trim_size,  # one hour in day units
+        timebinsize=timebinsize  # 0 minutes in day units
+    )
     # hatp26b_krdata_apers = {}
     with Pool(cpu_count()-1) as pool:
-        pool.starmap(run_one, zip(aper_keys))
-
-    # [37:38]
+        pool.starmap(run_partial_one, zip(aper_keys))
