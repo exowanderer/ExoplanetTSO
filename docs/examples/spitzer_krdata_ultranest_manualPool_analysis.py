@@ -94,7 +94,7 @@ def run_one(
 
     # visualise_ultranest_traces_corner(hatp26b_krdata, suptitle=None)
 
-    return hatp26b_krdata
+    return aper_key, hatp26b_krdata
 
 
 if __name__ == '__main__':
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     # aper_key = 'rad_2p5_0p0'
     centering_key = 'gaussian_fit'
     # centering_key = 'fluxweighted'
-    trim_size = 1/24  # one hour in day units
+    trim_size = 0.5/24  # one hour in day units
     timebinsize = 0/60/24  # 0 minutes in day units
 
     aornums = [
@@ -149,4 +149,6 @@ if __name__ == '__main__':
     )
     # hatp26b_krdata_apers = {}
     with Pool(cpu_count()-1) as pool:
-        pool.starmap(run_partial_one, zip(aper_keys))
+        pool_output = pool.starmap(run_partial_one, zip(aper_keys))
+
+    # hatp26b_results = dict(pool_output)
