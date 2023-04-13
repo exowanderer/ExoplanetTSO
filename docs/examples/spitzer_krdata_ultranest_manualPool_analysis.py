@@ -18,17 +18,16 @@ from exotso.utils import (
 def run_one(
     aper_key,
     n_sig=5,
-    aor_dir='r64922368',
-    channel='ch2',  # CHANNEL SETTING
-    planet_name='hatp26b',
-    mast_name='HAT-P-26b',
-    inj_fpfs=0 / 1e6,  # no injected signal
-    init_fpfs=265 / 1e6,  # no injected signal
+    aor_dir='r11235813',
+    channel='chX',  # CHANNEL SETTING
+    planet_name='planet_name',
+    mast_name='Planet-Name-b',
+    init_fpfs=0 / 1e6,  # no injected signal
     num_live_points=400,
     # aper_key = 'rad_2p5_0p0',
     centering_key='gaussian_fit',
     # centering_key = 'fluxweighted',
-    trim_size=1/24,  # one hour in day units
+    trim_size=0/24,  # one hour in day units
     timebinsize=0/60/24  # 0 minutes in day units
 ):
     print(f'Running Ultranest on {aper_key}')
@@ -104,7 +103,6 @@ if __name__ == '__main__':
     channel = 'ch2'  # CHANNEL SETTING
     planet_name = 'hatp26b'
     mast_name = 'HAT-P-26b'
-    inj_fpfs = 0 / ppm  # no injected signal
     init_fpfs = 265 / ppm  # no injected signal
     num_live_points = 400
     # aper_key = 'rad_2p5_0p0'
@@ -140,15 +138,20 @@ if __name__ == '__main__':
         channel=channel,  # CHANNEL SETTING
         planet_name=planet_name,
         mast_name=mast_name,
-        inj_fpfs=inj_fpfs,  # no injected signal
         init_fpfs=init_fpfs,  # no injected signal
         num_live_points=num_live_points,
         centering_key=centering_key,
         trim_size=trim_size,  # one hour in day units
         timebinsize=timebinsize  # 0 minutes in day units
     )
+
     # hatp26b_krdata_apers = {}
     with Pool(cpu_count()-1) as pool:
         pool_output = pool.starmap(run_partial_one, zip(aper_keys))
 
     # hatp26b_results = dict(pool_output)
+
+    # hatp26b_results = {}
+    # for aper_key_ in aper_keys:
+    #     key, val = run_partial_one(aper_key_)
+    #     hatp26b_results[key] = val

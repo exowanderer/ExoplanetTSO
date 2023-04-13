@@ -43,7 +43,7 @@ def ultranest2dataframe(
 
     ultranest_cdx = []
     for key, val in ultranests.items():
-        aper_rad = key.split('rad_')[-1].replace('.joblb.save', '')
+        aper_rad = key.split('rad_')[-1].replace('.joblib.save', '')
         static_rad, var_rad = aper_rad.split('_')
         static_rad = float(static_rad.replace('p', '.'))
         var_rad = float(var_rad.replace('p', '.'))
@@ -75,7 +75,7 @@ def ultranest2hist_df(ultranests, idx=0, sort_column='aper', nbins=25):
 
     ultranest_hist = []
     for key, val in ultranests.items():
-        aper_rad = key.split('rad_')[-1].replace('.joblb.save', '')
+        aper_rad = key.split('rad_')[-1].replace('.joblib.save', '')
         static_rad, var_rad = aper_rad.split('_')
         static_rad = float(static_rad.replace('p', '.'))
         var_rad = float(var_rad.replace('p', '.'))
@@ -138,22 +138,47 @@ def plot100_cornerplots(ultranests, fpfs_idx=None):
 
 
 if __name__ == '__main__':
-    first_savedir = 'hatp26b_ultanest_savedir_take1'
-    second_savedir = 'hatp26b_ultanest_savedir_take2'
+    savedir_base = 'ultranest_savedir'
+    without_trim = 'without_trim'
+    with_trim = 'with_trim'
 
-    glob_string1 = os.path.join(
-        first_savedir,
+    first_withoutdir = 'hatp26b_ultanest_savedir_take1'
+    second_withoutdir = 'hatp26b_ultanest_savedir_take2'
+
+    first_withdir = 'hatp26b_ultanest_withdir_take1'
+    second_withdir = 'hatp26b_ultanest_withdir_take2'
+
+    glob_string_without1 = os.path.join(
+        savedir_base,
+        without_trim,
+        first_withoutdir,
         'hatp26b_ultranest_krdata_2023*'
     )
 
-    glob_string2 = os.path.join(
-        second_savedir,
+    glob_string_without2 = os.path.join(
+        savedir_base,
+        without_trim,
+        second_withoutdir,
+        'hatp26b_ultranest_krdata_2023*'
+    )
+
+    glob_string_with1 = os.path.join(
+        savedir_base,
+        with_trim,
+        first_withdir,
+        'hatp26b_ultranest_krdata_2023*'
+    )
+
+    glob_string_with2 = os.path.join(
+        savedir_base,
+        with_trim,
+        second_withdir,
         'hatp26b_ultranest_krdata_2023*'
     )
 
     ultranests = {}
-    for fname in glob(glob_string2):
-        aper_rad = fname.split('rad_')[-1].replace('.joblb.save', '')
+    for fname in glob(glob_string_with2):
+        aper_rad = fname.split('rad_')[-1].replace('.joblib.save', '')
         ultranests[aper_rad] = joblib.load(fname)['ultranest']
 
         results = ultranests[aper_rad]
@@ -259,4 +284,5 @@ if __name__ == '__main__':
     plt.xlabel('Static + Variable Radius', fontsize=20)
     plt.ylabel('Log(z) [evidence]', fontsize=20)
     plt.legend(fontsize=20)
-    fig.savefig('HAT-P-26b_Median_Aperture_Radii_vs_LogZ.png')
+    # fig.savefig('HAT-P-26b_Median_Aperture_Radii_vs_LogZ.png')
+    plt.show()

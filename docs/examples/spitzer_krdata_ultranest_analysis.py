@@ -48,7 +48,7 @@ if __name__ == '__main__':
         for col_ in df_hatp26b.columns if 'flux' in col_ and 'rad' in col_
     ]
     hatp26b_krdata_apers = {}
-    for kaor_, aper_key in enumerate(aper_keys[:1]):
+    for kaor_, aper_key in enumerate(aper_keys):
         aper_key = 'rad_2p5_0p0'
         hatp26b_krdata = ExoplanetUltranestTSO(
             df=df_hatp26b,
